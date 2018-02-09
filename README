@@ -1,0 +1,105 @@
+== Hardware Environment ==
+
+To conduct experiments, you need two machines M.time and M.acc:
+
+    - M.time : 
+        To measure the running time when data cannot fit in memory. 
+        Memory size of M.time is about 1 GB. The swap is about 28 GB
+        for the execuation of liblinear.
+    - M.acc :
+        To draw figures, we need accuracy and function value
+        at each time point. To efficiently calculate the them,
+        we run the same algorithms on a machine with enough
+        memory. The memory size of M.acc should be at least
+        32GB. We draw figures on M.acc, and you need to install
+        py-matplotlib and latex there. 
+
+    For the disk size, you need about 400 GB to run all
+    experiments.  We assume the directory cdblock_exp-2.0 is located
+    on the home directory of both M.time and M.acc. We also assume
+    that the working directory is cdblock_exp-2.0/ in the beginning
+    of the following sections.
+        
+== Preparing data sets ==
+
+The following step downloads webspam and epsilon from LIBSVM data sets
+and splits them to 4/5 training and 1/5 testing on M.time.
+
+M.time> cd data; ./fetch-and-split.py; cd -
+
+== Splitting training data to blocks ==
+
+The following step splits training data to various blocks (in binary
+format). See Algorithm 4.
+
+M.time> cd data; ./gen-block.py; cd -
+
+== Saving files in binary format on M.acc ==
+
+We have only downloaded data sets to M.time, so we need them on M.acc
+as well. As on M.acc we simulate proposed algorithms in memory, there
+is no need to split data to blocks. Instead we store each training and
+testing file in binary format.
+
+1.  copy data from M.time to M.acc:
+
+M.time> cd data
+M.time> scp webspam.train webspam.test epsilon.scale.train epsilon.scale.test \
+        kddb kddb.t M.acc:cdblock_exp-2.0/data/
+
+2. Save files in binary format
+
+M.acc> cd data; ./data/gen-single-binary.py; cd -
+
+== Generating files in VW cache format ==
+
+The following step generates compressed-cached files needed for VW
+
+M.acc> cd data; shuf kddb > kddb.shuf; scp kddb.shuf M.time:cdblock_exp-2.0/data/ ; cd -
+M.time> cd data; ./gen-vw-fmt.py; cd -
+
+== Running on M.time Measure Time ==
+
+You need to run three scripts:
+
+M.time> ./go-compare-solvers-tkdd.py time
+M.time> ./go-compare-perm.py
+M.time> ./go-compare-blocksize.py
+M.time> ./go-compare-avg-subsample.py time
+M.time> ./go-compare-block-vw-bestC.py time
+
+== Running on M.acc to Calculate Accuracy and Objective Function Values ==
+
+You need to run the following script:
+
+M.acc> ./go-compare-solvers.py acc
+M.acc> ./go-compare-avg-subsample.py acc
+M.acc> ./go-compare-block-vw-bestC.py acc
+
+== Collecting Results ==
+
+Copy time-logs on M.time to M.acc for drawing figures:
+
+M.time> scp -r log/time M.acc:cdblock_exp-2.0/log/
+M.time> scp -r log/acc M.acc:cdblock_exp-2.0/log/
+
+== Drawing figures ==
+
+You need to specify the final primal objective value as the reference value. Then the script can calculate the relative function value difference. You need to manually 
+modify the "primal" field for each data in data.py. 
+For example: 
+If the last line in log/acc/web40#LIBLINEAR.acc shows
+12345.678, you need to change
+  web40 = Data('web40','webspam.train', 'webspam.test', 40, 1594.05, 10277.335292)
+to 
+  web40 = Data('web40','webspam.train', 'webspam.test', 40, 1594.05, 12345.678)
+in data.py
+Generated figures are loacted at the folder 'figures/'.
+
+M.time> cd plotfigures
+M.time> ./draw-compare-solvers-tkdd.py
+M.time> ./draw-compare-perm.py
+M.time> ./draw-compare-blocksize.py
+M.time> ./draw-compare-block-vw-bestC.py
+M.time> ./draw-subset.py
+

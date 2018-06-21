@@ -74,7 +74,7 @@ void set_print_string_function(void (*print_func) (const char*));
 
 void solve_l2r_l1l2_svc(
 	const problem *prob, double *w, 
-	double *alpha, double eps, 
+	double *alpha, int *offset, double eps, 
 	double Cp, double Cn, int solver_type,
 	double *_PGmax, double *_PGmin, int max_iter, bool* solved);
 void pegasos_update_subgradient(const problem *prob, int n, double *w, double lambda, double eta);

@@ -53,7 +53,9 @@ class BlockProblem{
 	public:
 		int nBlocks, n, l, nr_class;
 		int datafmt;
+		int random_assign;
 		double bias;
+		char input_file_name[1024];
 		vector<string> binary_files;
 		vector<int> start;
 		vector<int> subl;
@@ -71,6 +73,8 @@ class BlockProblem{
 
 		// Get the (problem*) prob of the specified block
 		struct problem* get_block(int id);
+		
+		struct problem* my_get_block(const char* dirname, int id);
 
 		//return problem* prob contains first block to id-block
 		struct problem* get_acc_block(int id);

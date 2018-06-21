@@ -184,8 +184,11 @@ void BinaryProblem::load_body(FILE *fp, int datafmt) {
 	} else if(datafmt == COMPRESSION) {
 		unsigned char *compressedbuf;
 		compressedbuf = Malloc(unsigned char, filelen);
+		//printf("filelen=%d\n",filelen);
 		myfread(compressedbuf, sizeof(unsigned char), filelen, fp);
+		//printf("buff=%c\n",*compressedbuf);
 		int retcode = myuncompress(buf, &buflen, compressedbuf, filelen);
+		//printf("buff=%c\n",*buf);
 		if(retcode != Z_OK) {
 			fprintf(stderr, "OK %d MEM %d BUF %d DATA %d g %d %p %ld\n", Z_OK, Z_MEM_ERROR, 
 					Z_BUF_ERROR, Z_DATA_ERROR, retcode, buf, buflen);
@@ -204,7 +207,10 @@ void BinaryProblem::parseBinary(){
 
 	prob.x = (struct feature_node**) (buf + offset); 
 	for(int i = 0; i < prob.l; i++) 
+	{
 		prob.x[i] = x_space + (unsigned long)prob.x[i];
+		//printf("prob.x[%d]=%d %f\n", i, prob.x[i]->index, prob.x[i]->value);
+	}
 }
 
 // Body of Class BlockProblem
@@ -262,6 +268,7 @@ void BlockProblem::read_single(const char* singlefile, int nsplits) {
 }
 
 void BlockProblem::read_meta(const char* dirname){
+	
 	char filename[1024], fmt[81];
 	sprintf(filename,"%s/meta", dirname);
 	FILE *meta = fopen(filename, "r");
@@ -273,11 +280,18 @@ void BlockProblem::read_meta(const char* dirname){
 		fprintf(stderr, "Unsupported data format\n");
 		exit(-1);
 	}
+
 	fscanf(meta, "%d %d %d %d", &nBlocks, &l, &n, &nr_class);
+
+	
 	label.resize(nr_class, 0);
 	for(int i = 0; i < nr_class; i++)
+	{
 		fscanf(meta, "%d", &label[i]);
-
+		printf("%d\n", label[i]);
+	}
+	
+	/*
 	binary_files.resize(nBlocks,"");
 	start.resize(nBlocks,0);
 	subl.resize(nBlocks,0);
@@ -285,8 +299,10 @@ void BlockProblem::read_meta(const char* dirname){
 		fscanf(meta, "%d %d %s", &start[i], &subl[i], filename);
 		binary_files[i] = string(dirname) + "/" + string(filename); 
 	}
+	*/
 	fclose(meta);
 }
+
 struct problem* BlockProblem::get_acc_block(int id){
 	int sublt = 0;
 	switch(datafmt){
@@ -319,6 +335,8 @@ struct problem* BlockProblem::get_block(int id) {
 			break;
 		case COMPRESSION:
 			prob_.load_problem(binary_files[id].c_str(), COMPRESSION);
+			//printf("%s\n",binary_files[id].c_str());
+			//printf("&prob_=%p\n", &prob_);
 			return prob_.get_problem();
 			break;
 		default:
@@ -326,6 +344,19 @@ struct problem* BlockProblem::get_block(int id) {
 			exit(-1);
 			break;
 	}
+}
+
+struct problem* BlockProblem::my_get_block(const char* dirname, int id) {
+	if (id >= nBlocks) {
+		fprintf(stderr,"Wrong Block Id %d, only %d blocks\n", id, nBlocks);
+		exit(-1);
+		return NULL;
+	}
+	//printf("test: %s\n", dirname);
+	//prob_.load_problem(binary_files[id].c_str(), COMPRESSION);
+	//printf("%s\n",binary_files[id].c_str());
+	struct problem* subprob;
+	return subprob;
 }
 
 BlockProblem BlockProblem::genSubProblem(const vector<int>& blocklist) {
@@ -660,14 +691,97 @@ void block_pegasos(BlockProblem *bprob, const parameter *param, double *w, doubl
 	delete [] perm;
 }
 
+struct problem my_get_block(BlockProblem *bprob, int sub_id, unsigned long long *offset, int **assign_table, FILE *fp, int *num_feature)
+{
+	struct problem subprob;
+	subprob.l = bprob->l/bprob->nBlocks;
+	subprob.n = bprob->n;
+	subprob.bias = -1;
+	
+	feature_node **node = Malloc(feature_node*,subprob.l);
+	int *y = Malloc(int,subprob.l);
+	
+	subprob.y = y;
+
+	feature_node *node_buffer = Malloc(feature_node,subprob.n);
+	
+	//setvbuf( fp , NULL , _IONBF , 0 );
+	//setbuf ( fp , NULL );
+	//setvbuf( fp , NULL , _IOFBF , 404200 );
+	
+	time_t startload_t = time(NULL);
+	time_t start_test = time(NULL);
+	double total_load = 0;
+	int temp = 0;
+	for(int i=0; i<subprob.l; i++)
+	{
+		int instance_id = assign_table[sub_id][i];
+		//int instance_id = sub_id*19264097/40+(rand() % (19264097/40));
+		startload_t = time(NULL);
+		fseek(fp, offset[instance_id], SEEK_SET);
+		total_load += difftime(time(NULL), startload_t);
+		fread(&subprob.y[i], sizeof(int), 1, fp);
+	
+		
+		feature_node *xi = node_buffer;
+		
+		
+		
+		for(int j=0; j<num_feature[instance_id]; j++)
+		{
+			fread(&xi->index, sizeof(int), 1, fp);
+			xi++;
+			temp++;
+		}
+		xi->index = -1;
+		
+		xi -= num_feature[instance_id];
+	
+		for(int j=0; j<num_feature[instance_id]; j++)
+		{
+			fread(&xi->value, sizeof(double), 1, fp);
+			xi++;
+		}
+		
+		
+		node[i] = Malloc(feature_node,num_feature[instance_id]+1);
+
+		for(int j=0; j<num_feature[instance_id]+1; j++)
+			node[i][j] = node_buffer[j];
+		
+		subprob.x = node;
+		
+		
+		/*
+		printf("subprob: %d , instance_id: %d, y: %d\n",sub_id, instance_id, subprob.y[i]);
+		
+		for(int j=0; j<num_feature[instance_id]; j++)
+		{
+			printf("index[%d]=%d , value[%d]=%lf\n",j,subprob.x[i][j].index,j,subprob.x[i][j].value);
+		}
+		
+		if(instance_id==99)
+			for(int j=0; j<num_feature[99]; j++)
+				printf("index[%d]=%d , value[%d]=%lf\n",j,subprob.x[i][j].index,j,subprob.x[i][j].value);
+		*/
+		
+	}
+	//printf("\n\nTotal %.5lf test:%.5lf\n\n", difftime(time(NULL), start_test), total_load);
+	//printf("BUFSIZ: %d \n", BUFSIZ);
+
+	free(node_buffer);
+	return subprob;
+}
+
 void block_solve_linear_c_svc(BlockProblem *bprob, const parameter *param, double *w, double Cp, double Cn) {
 	int nBlocks = bprob->nBlocks;
+	int random_assign = bprob->random_assign;
 	int l = bprob->l;
 	int n = bprob->n;
 	int solver_type = param->solver_type;
 	int max_iter=param->max_iter;
 	int inner_max_iter=param->inner_max_iter;
-	int is_perm =param->is_perm;
+	//int is_perm =param->is_perm;
 	double eps=param->eps;
 	double inner_eps = param->inner_eps;
 	double PGmax=-INF, PGmin=INF;
@@ -676,60 +790,164 @@ void block_solve_linear_c_svc(BlockProblem *bprob, const parameter *param, doubl
 		return;
 	}
 
+	printf("l=%d\n",l);
+	printf("random_assign=%d\n",random_assign);
 	int *y = new int[l];
 	double *alpha = new double[l];
 	memset(alpha, 0, sizeof(double) * l);
 	memset(w, 0, sizeof(double) * n);
 	int iter = 0;
+	printf("nBlocks=%d\n", nBlocks);
 	int *perm = new int[nBlocks];
-	for(int i = 0; i < nBlocks; i++)
-		perm[i] = i;
+	//for(int i = 0; i < nBlocks; i++)
+		//perm[i] = i;
 
 	time_t start_t, startload_t;
 	clock_t startcpu;
-	double total_time = 0, total_load = 0, total_cpu = 0;
-	while (iter < max_iter) {
+	double total_time = 0, total_load = 0, total_cpu = 0, init_load_t=0;
+	
+//----------initial load--------------
+	startload_t = time(NULL);
+	
+	//---------------------get byte_offset-------------------	
+	FILE *training_data;
+	char training_binary_dir[1024];
+	
+	strcpy(training_binary_dir, bprob->input_file_name);
+	strcat(training_binary_dir, "binary_file");
+	
+	printf("training_binary_dir: %s\n", training_binary_dir);
+	training_data = fopen(training_binary_dir, "rb");
+	
+	
+	
+	int *num_feature = Malloc(int, l);
+	fread(&num_feature[0], sizeof(int), l, training_data);
+	
+	unsigned long long *byte_offset = Malloc(unsigned long long,l+1);
+	byte_offset[0] = l * 4;
+	for(int i=1; i<l; i++)
+	{
+		byte_offset[i] = byte_offset[i-1] + 4 + 12 * num_feature[i-1];
+		//if(i%10000==0)
+			//printf("byte_offset[i]: %llu\n", i, byte_offset[i]);
+	}
+	printf("byte_offset[%d]: %llu\n", 0, byte_offset[0]);
+	printf("byte_offset[%d]: %llu\n", l-1, byte_offset[l-1]);
+	//free(num_feature);
+	//---------------------get byte_offset-------------------	
+	
+	init_load_t += difftime(time(NULL), startload_t);
+	printf("initial load time: %f\n",init_load_t);
+	
+//----------initial load--------------
+
+//---------set random assign table----
+	int **assign_table = (int**) malloc(nBlocks*sizeof(int**));
+	for(int i=0;i<nBlocks;i++)
+			assign_table[i] = (int*)malloc((l/nBlocks)*sizeof(int*));
+
+	for(int i=0;i<nBlocks;i++)
+			for(int j=0;j<l/nBlocks;j++)
+					assign_table[i][j] = i*l/nBlocks+j;
+	
+
+//---------set random assign table----
+
+while (iter < max_iter) {
 		startcpu = clock();
 		start_t = time(NULL);
 		startload_t = start_t;
 		PGmax = -INF;
 		PGmin = INF;
 		iter++;
-		//	inner_eps /= (iter + 10);
-		if(is_perm) 
-		for (int i=0; i<nBlocks; i++) {
-			int j = i+rand()%(nBlocks-i);
-			swap(perm[i], perm[j]);
-		}
+		
 		bool solved = true;
+		
+		//Random shuffle --old
+		/*
+		if(random_assign)
+		{
+			for(int i=0;i<nBlocks;i++)
+			{
+					for(int j=0;j<l/nBlocks;j++)
+					{
+							int k = i+rand()%(nBlocks-i);
+							int w = j+rand()%(l/nBlocks-j);
 
-		total_cpu += (double) (clock() - startcpu) / CLOCKS_PER_SEC;
-		for (int i=0; i < nBlocks; i++) {
-			startload_t = time(NULL);
-			struct problem *subprob = bprob->get_block(perm[i]);
-			total_load += difftime(time(NULL), startload_t);
-			startcpu = clock();
-			int start = bprob->start[perm[i]];
-			if(iter == 1) {
-				for(int j = start; j < start + subprob->l; j++) {
-					int lb = subprob->y[j-start];
-					if(lb == bprob->label[0]) y[j] = 1;
-					else if (lb == bprob->label[1]) y[j] = -1;
-					else {
-						printf("id=%d, start = %d, l = %d datafmt = %d\n", i, start, subprob->l, bprob->datafmt);
-						fprintf(stderr,"The label is wrong %d %d %d\n", lb, bprob->label[0], bprob->label[1]);
-						exit(-1);
+							int temp = assign_table[i][j];
+							assign_table[i][j] = assign_table[k][w];
+							assign_table[k][w] = temp;
 					}
+			}
+		}
+		*/
+		
+		//Random shuffle for kdd(small instance workload)
+		
+		int *blk_size = Malloc(int, nBlocks); //The instance number of each block
+		for(int i=0; i<nBlocks; i++)
+			blk_size[i] = 0;
+		int page_id = byte_offset[0]/4096; //start page
+		if(random_assign)
+		{
+			int select_blk = rand()%40; //select a block
+			for(int i=0; i<l; i++)
+			{
+				if( (byte_offset[i]/4096) > page_id) //next page
+				{
+					select_blk = rand()%40;
+					page_id++;
+				}
+				if(blk_size[select_blk] >= (l/nBlocks))
+				{
+					select_blk = rand()%40;
+				}
+				else
+				{
+					assign_table[select_blk][blk_size[select_blk]] = i;
+					blk_size[select_blk]++;
+					//printf("instance %d(Page_id %d) assign to block %d \n", i, page_id, select_blk);
 				}
 			}
-			subprob->y = y+start;
+			//printf("Done.\n");
+		}
+		
+		
+        
 
-			//			fprintf(stderr,"%-3d", perm[i]);
-			//			if(i%20==19) fprintf(stderr,"\n");
+		total_cpu += (double) (clock() - startcpu) / CLOCKS_PER_SEC;
+
+		for (int i=0; i < nBlocks; i++) {
+			
+			//struct problem *subprob = bprob->get_block(perm[i]);
+			startload_t = time(NULL);
+			struct problem subprob = my_get_block(bprob, i, byte_offset, assign_table, training_data, num_feature);
+			total_load += difftime(time(NULL), startload_t);
+			
+			struct problem *p = &subprob;
+			
+			//p->y = subprob.y;
+			//printf("p->y:%d\n", p->y[0]);
+			//p->x = subprob.x;		
+			//printf("p->x index:%d value:%f\n", p->x[0]->index, p->x[0]->value);
+			
+			
+			
+			startcpu = clock();
 			double PGmax_ , PGmin_ ;
-			solve_l2r_l1l2_svc(subprob,
-					w, alpha+start, inner_eps, Cp, Cn, solver_type,
-					&PGmax_, &PGmin_, inner_max_iter, &solved);
+			//printf("%d\n",20000*i);
+
+			solve_l2r_l1l2_svc(p,w,alpha,assign_table[i], inner_eps, Cp, Cn, solver_type,&PGmax_, &PGmin_, inner_max_iter, &solved);
+			
+			for(int i=0; i<subprob.l; i++)
+			{
+				free(p->x[i]);
+			}
+			free(p->x);
+			free(p->y);
+			
+			
 			PGmax = max(PGmax, PGmax_);
 			PGmin = min(PGmin, PGmin_);
 			total_cpu += (double) (clock() - startcpu) / CLOCKS_PER_SEC;
@@ -765,8 +983,8 @@ void block_solve_linear_c_svc(BlockProblem *bprob, const parameter *param, doubl
 			printf("aoc %lf ", 100*evaluate_testing(w, n, param->prob_t, bprob->label[0]));
 		printf("\n");
 		fflush(stdout);
-		if(solved && PGmax - PGmin < eps)
-			break;
+		//if(solved && PGmax - PGmin < eps)
+			//break;
 
 	}
 
@@ -834,7 +1052,6 @@ void blocktrain_MCSVM_CS(BlockProblem *bprob, const parameter *param, double *w,
 			//			fprintf(stderr,"%-3d", perm[i]);
 			//			if(i%20==19) fprintf(stderr,"\n");
 			double stopping_;
-
 			Solver_MCSVM_CS Solver(subprob, nr_class, weighted_C, inner_eps, inner_max_iter);
 			Solver.Solve(w, alpha+start*nr_class, &stopping_, &solved);
 			stopping = max(stopping, stopping_);
@@ -878,11 +1095,11 @@ void block_subsample_solver(BlockProblem *bprob, const parameter *param, double 
 	int l = bprob->l;
 	int n = bprob->n;
 	int solver_type = param->solver_type;
-	int max_iter=param->max_iter;
-	int inner_max_iter=param->inner_max_iter;
-	int is_perm =param->is_perm;
-	double eps=param->eps;
-	double inner_eps = param->inner_eps;
+	//int max_iter=param->max_iter;
+	//int inner_max_iter=param->inner_max_iter;
+	//int is_perm =param->is_perm;
+	//double eps=param->eps;
+	//double inner_eps = param->inner_eps;
 	double PGmax=-INF, PGmin=INF;
 	if(solver_type != L2R_L1LOSS_SVC_DUAL_SUBSAMPLE) {
 		fprintf(stderr, "Error: unknown solver_type or unsupported solver_type\n");
@@ -917,7 +1134,7 @@ void block_subsample_solver(BlockProblem *bprob, const parameter *param, double 
 			int j = i+rand()%(nBlocks-i);
 			swap(perm[i], perm[j]);
 		}*/
-		bool solved = true;
+		//bool solved = true;
 		memset(w, 0, sizeof(double)*n);
 
 		total_cpu += (double) (clock() - startcpu) / CLOCKS_PER_SEC;
@@ -943,10 +1160,11 @@ void block_subsample_solver(BlockProblem *bprob, const parameter *param, double 
 
 			double PGmax_ , PGmin_ ;
 			memset(w_tmp, 0, sizeof(double) * n);
-			solve_l2r_l1l2_svc(subprob,
+			/*solve_l2r_l1l2_svc(subprob,
 					w_tmp, alpha+start, inner_eps, Cp, Cn, solver_type,
 					&PGmax_, &PGmin_, inner_max_iter, &solved);
-			if(param->prob_t != NULL) {
+			*/
+					if(param->prob_t != NULL) {
 				printf("block %d ", i);
 				printf("aoc %lf ", 100*evaluate_testing(w_tmp, n, param->prob_t, bprob->label[0]));
 				printf("\n");
@@ -1004,11 +1222,11 @@ void block_average_solver(BlockProblem *bprob, const parameter *param, double *w
 	int l = bprob->l;
 	int n = bprob->n;
 	int solver_type = param->solver_type;
-	int max_iter=param->max_iter;
-	int inner_max_iter=param->inner_max_iter;
+	//int max_iter=param->max_iter;
+	//int inner_max_iter=param->inner_max_iter;
 	int is_perm =param->is_perm;
-	double eps=param->eps;
-	double inner_eps = param->inner_eps;
+	//double eps=param->eps;
+	//double inner_eps = param->inner_eps;
 	double PGmax=-INF, PGmin=INF;
 	if(solver_type != L2R_L2LOSS_SVC_DUAL_AVG && solver_type != L2R_L1LOSS_SVC_DUAL_AVG) {
 		fprintf(stderr, "Error: unknown solver_type or unsupported solver_type\n");
@@ -1043,7 +1261,7 @@ void block_average_solver(BlockProblem *bprob, const parameter *param, double *w
 			int j = i+rand()%(nBlocks-i);
 			swap(perm[i], perm[j]);
 		}
-		bool solved = true;
+		//bool solved = true;
 		memset(w, 0, sizeof(double)*n);
 
 		total_cpu += (double) (clock() - startcpu) / CLOCKS_PER_SEC;
@@ -1069,10 +1287,12 @@ void block_average_solver(BlockProblem *bprob, const parameter *param, double *w
 
 			double PGmax_ , PGmin_ ;
 			memset(w_tmp, 0, sizeof(double) * n);
+			/*
 			solve_l2r_l1l2_svc(subprob,
 					w_tmp, alpha+start, inner_eps, Cp, Cn, solver_type,
 					&PGmax_, &PGmin_, inner_max_iter, &solved);
-			if(param->prob_t != NULL) {
+			*/
+					if(param->prob_t != NULL) {
 				printf("block %d ", i);
 				printf("aoc %lf ", 100*evaluate_testing(w_tmp, n, param->prob_t, bprob->label[0]));
 				printf("\n");
@@ -1157,6 +1377,7 @@ void blocktrain_one(BlockProblem *bprob, const parameter *param, double *w, doub
 struct model* blocktrain(BlockProblem* bprob, const  parameter* param) {
 	//int l = bprob->l;
 	int n = bprob->n;
+	printf("n=%d\n",n);
 	model *model_ = Malloc(model,1);
 
 	if(bprob->bias>=0)
@@ -1167,7 +1388,11 @@ struct model* blocktrain(BlockProblem* bprob, const  parameter* param) {
 	model_->bias = bprob->bias;
 
 	int nr_class = bprob->nr_class;
+	printf("nr_class=%d\n",nr_class);
 	vector<int> &label = bprob->label;
+	//printf("label.size=%d\n",label.size());
+	printf("label[0]=%d\n",label[0]);
+	printf("label[1]=%d\n",label[1]);
 
 	model_->nr_class = nr_class;
 	model_->label = Malloc(int, nr_class);
@@ -1179,6 +1404,7 @@ struct model* blocktrain(BlockProblem* bprob, const  parameter* param) {
 
 	for(int i=0;i<nr_class;i++)
 		weighted_C[i] = param->C;
+	printf("param->nr_weight:%d\n",param->nr_weight);
 	for(int i=0;i<param->nr_weight;i++) {
 		int j;
 		for(j=0;j<nr_class;j++)
@@ -1191,14 +1417,16 @@ struct model* blocktrain(BlockProblem* bprob, const  parameter* param) {
 	}
 
 	srand(1);
-
 	if(param->solver_type == MCSVM_CS)
 	{
 		model_->w=Malloc(double, n*nr_class);
 		blocktrain_MCSVM_CS(bprob, param, model_->w, nr_class, weighted_C);
-	} else {
+	} 
+	else {
 		if(nr_class == 2) {
 			model_->w=Malloc(double, n);
+			printf("model_->w[0]=%f\n",model_->w[0]);
+			printf("model_->w[1]=%f\n",model_->w[1]);
 			blocktrain_one(bprob, param, model_->w, param->C, param->C);
 		} else {
 			fprintf(stderr, "Try -s 4 for Multiclass-SVM\n");
@@ -1252,4 +1480,3 @@ double block_cross_validation(BlockProblem *bprob, const parameter *param, int n
 	
 	return acc / bprob->l;
 }
-

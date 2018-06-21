@@ -37,6 +37,9 @@ void exit_with_help()
 	"-t test_file: test_file in compression format\n"
 	"-S nblocks : Single file mode, all data stored in memory, and set nBlocks\n"
 	"-o : show the primal value\n"
+	"-l : number of training instances\n"
+	"-n : average number of non-zero features of one training instance\n"
+	"-a : number of classes\n"
 	);
 	exit(1);
 }
@@ -63,19 +66,17 @@ int main(int argc, char **argv)
 
 	parse_command_line(argc, argv, input_file_name, model_file_name);
 	//read_problem(input_file_name);
+	strcpy(bprob.input_file_name, input_file_name);
+
+	printf("input_file_name %s\n",input_file_name);
+	printf("model_file_name %s\n",model_file_name);
+	printf("nBlocks: %d\n", nBlocks);	
+	printf("input file name: %s\n", bprob.input_file_name);	
+		
+	bprob.read_meta(input_file_name);
 	
-	if(nBlocks) {
-		//bprob.read_single(input_file_name, nBlocks);
-		bprob.read_single(input_file_name, nBlocks);
-	} else {
-		bprob.read_meta(input_file_name);
-	}
 	bprob.setBias(bias);
 	error_msg = check_parameter(NULL,&param);
-	if(prob_t.l > 0) {
-		prob_t.setBias(bprob.n, bias);
-		param.prob_t = prob_t.get_problem();
-	}
 
 	if(error_msg)
 	{
@@ -83,17 +84,10 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	if(flag_cross_validation)
-	{
-		fprintf(stderr,"Support Binary Class Only Now\n");
-		do_cross_validation();
-	}
-	else
-	{
-		model_=blocktrain(&bprob, &param);
-		//save_model(model_file_name, model_);
-		free_and_destroy_model(&model_);
-	}
+	model_=blocktrain(&bprob, &param);
+	//save_model(model_file_name, model_);
+	free_and_destroy_model(&model_);
+	
 	destroy_param(&param);
 
 	return 0;
@@ -177,8 +171,25 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 
 			case 'S':
 				nBlocks = atoi(argv[i]);
+				bprob.nBlocks = atoi(argv[i]);
+				break;
+			
+			case 'r':
+				bprob.random_assign = atoi(argv[i]);
+				break;
+/*
+			case 'l':
+				bprob.l = atoi(argv[i]);
 				break;
 
+			case 'n':
+				bprob.n = atoi(argv[i]);
+				break;
+			
+			case 'a':
+				bprob.nr_class = atoi(argv[i]);
+				break;*/
+			
 			case 't':
 				prob_t.load_problem(argv[i], COMPRESSION);
 				break;

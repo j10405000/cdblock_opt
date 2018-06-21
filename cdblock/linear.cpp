@@ -714,7 +714,7 @@ void Solver_MCSVM_CS::Solve(double *w, double *alpha, double *_stopping, bool *s
 
 void solve_l2r_l1l2_svc(
 	const problem *prob, double *w, 
-	double *alpha, double eps, 
+	double *alpha, int *offset, double eps, 
 	double Cp, double Cn, int solver_type,
 	double *_PGmax, double *_PGmin, int max_iter=2000, bool *solved=NULL)
 {
@@ -772,6 +772,7 @@ void solve_l2r_l1l2_svc(
 
 	while (iter < max_iter)
 	{
+		//printf("Iter: %d\n", iter);
 		PGmax_new = -INF;
 		PGmin_new = INF;
 
@@ -796,10 +797,10 @@ void solve_l2r_l1l2_svc(
 			G = G*yi-1;
 
 			C = upper_bound[GETI(i)];
-			G += alpha[i]*diag[GETI(i)];
+			G += alpha[offset[i]]*diag[GETI(i)];
 
 			PG = 0;
-			if (alpha[i] == 0)
+			if (alpha[offset[i]] == 0)
 			{
 				if (G > PGmax_old)
 				{
@@ -811,7 +812,7 @@ void solve_l2r_l1l2_svc(
 				else if (G < 0)
 					PG = G;
 			}
-			else if (alpha[i] == C)
+			else if (alpha[offset[i]] == C)
 			{
 				if (G < PGmin_old)
 				{
@@ -831,9 +832,9 @@ void solve_l2r_l1l2_svc(
 
 			if(fabs(PG) > 1.0e-12)
 			{
-				double alpha_old = alpha[i];
-				alpha[i] = min(max(alpha[i] - G/QD[i], 0.0), C);
-				d = (alpha[i] - alpha_old)*yi;
+				double alpha_old = alpha[offset[i]];
+				alpha[offset[i]] = min(max(alpha[offset[i]] - G/QD[i], 0.0), C);
+				d = (alpha[offset[i]] - alpha_old)*yi;
 				xi = prob->x[i];
 				while (xi->index != -1)
 				{
@@ -1740,10 +1741,10 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 			break;
 		}
 		case L2R_L2LOSS_SVC_DUAL:
-			solve_l2r_l1l2_svc(prob, w, alpha, eps, Cp, Cn, L2R_L2LOSS_SVC_DUAL, &PGmax, &PGmin);
+			//solve_l2r_l1l2_svc(prob, w, alpha, eps, Cp, Cn, L2R_L2LOSS_SVC_DUAL, &PGmax, &PGmin);
 			break;
 		case L2R_L1LOSS_SVC_DUAL:
-			solve_l2r_l1l2_svc(prob, w, alpha, eps, Cp, Cn, L2R_L1LOSS_SVC_DUAL, &PGmax, &PGmin);
+			//solve_l2r_l1l2_svc(prob, w, alpha, eps, Cp, Cn, L2R_L1LOSS_SVC_DUAL, &PGmax, &PGmin);
 			break;
 		case L1R_L2LOSS_SVC:
 		{

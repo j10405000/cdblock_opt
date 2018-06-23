@@ -70,13 +70,18 @@ int main(int argc, char **argv)
 
 	printf("input_file_name %s\n",input_file_name);
 	printf("model_file_name %s\n",model_file_name);
-	printf("nBlocks: %d\n", nBlocks);	
+	//printf("nBlocks: %d\n", nBlocks);	-S is for single file mode
 	printf("input file name: %s\n", bprob.input_file_name);	
 		
 	bprob.read_meta(input_file_name);
 	
 	bprob.setBias(bias);
 	error_msg = check_parameter(NULL,&param);
+	
+	if(prob_t.l > 0) {
+		prob_t.setBias(bprob.n, bias);
+		param.prob_t = prob_t.get_problem();
+	}
 
 	if(error_msg)
 	{

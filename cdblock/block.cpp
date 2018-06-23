@@ -864,56 +864,61 @@ while (iter < max_iter) {
 		
 		bool solved = true;
 		
-		//Random shuffle --old
-		/*
-		if(random_assign)
+		//printf("Aversge instance size: %d\n", ((byte_offset[l-1] - byte_offset[0]) / l));
+		//Average instance size < page size (for kdd)
+		//Assign pages to blocks
+		if (((byte_offset[l-1] - byte_offset[0]) / l) < 4096)
 		{
-			for(int i=0;i<nBlocks;i++)
+			int *blk_size = Malloc(int, nBlocks); //The instance number of each block
+			for(int i=0; i<nBlocks; i++)
+				blk_size[i] = 0;
+			int page_id = byte_offset[0]/4096; //start page
+			if(random_assign)
 			{
+				int select_blk = rand()%40; //select a block
+				for(int i=0; i<l; i++)
+				{
+					if( (byte_offset[i]/4096) > page_id) //next page
+					{
+						select_blk = rand()%40;
+						page_id++;
+					}
+					if(blk_size[select_blk] >= (l/nBlocks))
+					{
+						select_blk = rand()%40;
+					}
+					else
+					{
+						assign_table[select_blk][blk_size[select_blk]] = i;
+						blk_size[select_blk]++;
+						//printf("instance %d(Page_id %d) assign to block %d \n", i, page_id, select_blk);
+					}
+				}
+				//printf("Done.\n");
+			}
+			
+		}
+		
+		//Average instance size > page size (for webspam and epsilon)
+		else
+		{
+			if(random_assign)
+			{
+				for(int i=0;i<nBlocks;i++)
+				{
 					for(int j=0;j<l/nBlocks;j++)
 					{
-							int k = i+rand()%(nBlocks-i);
-							int w = j+rand()%(l/nBlocks-j);
+						int k = i+rand()%(nBlocks-i);
+						int w = j+rand()%(l/nBlocks-j);
 
-							int temp = assign_table[i][j];
-							assign_table[i][j] = assign_table[k][w];
-							assign_table[k][w] = temp;
+						int temp = assign_table[i][j];
+						assign_table[i][j] = assign_table[k][w];
+						assign_table[k][w] = temp;
 					}
-			}
-		}
-		*/
-		
-		//Random shuffle for kdd(small instance workload)
-		
-		int *blk_size = Malloc(int, nBlocks); //The instance number of each block
-		for(int i=0; i<nBlocks; i++)
-			blk_size[i] = 0;
-		int page_id = byte_offset[0]/4096; //start page
-		if(random_assign)
-		{
-			int select_blk = rand()%40; //select a block
-			for(int i=0; i<l; i++)
-			{
-				if( (byte_offset[i]/4096) > page_id) //next page
-				{
-					select_blk = rand()%40;
-					page_id++;
-				}
-				if(blk_size[select_blk] >= (l/nBlocks))
-				{
-					select_blk = rand()%40;
-				}
-				else
-				{
-					assign_table[select_blk][blk_size[select_blk]] = i;
-					blk_size[select_blk]++;
-					//printf("instance %d(Page_id %d) assign to block %d \n", i, page_id, select_blk);
 				}
 			}
-			//printf("Done.\n");
+			
 		}
-		
-		
         
 
 		total_cpu += (double) (clock() - startcpu) / CLOCKS_PER_SEC;
@@ -937,9 +942,7 @@ while (iter < max_iter) {
 			startcpu = clock();
 			double PGmax_ , PGmin_ ;
 			//printf("%d\n",20000*i);
-
 			solve_l2r_l1l2_svc(p,w,alpha,assign_table[i], inner_eps, Cp, Cn, solver_type,&PGmax_, &PGmin_, inner_max_iter, &solved);
-			
 			for(int i=0; i<subprob.l; i++)
 			{
 				free(p->x[i]);
@@ -952,14 +955,15 @@ while (iter < max_iter) {
 			PGmin = min(PGmin, PGmin_);
 			total_cpu += (double) (clock() - startcpu) / CLOCKS_PER_SEC;
 		}
-
+		
 		total_time += difftime(time(NULL), start_t);
 		double v = 0;
 		// calculate dual obj
 		double diag_p = 0.5/Cp, diag_n = 0.5/Cn;
 		if(solver_type == L2R_L1LOSS_SVC_DUAL)
 			diag_p = diag_n = 0;
-
+		
+		
 		int nSV = 0;
 		for(int i=0; i<n; i++)
 			v += w[i]*w[i];
@@ -972,19 +976,23 @@ while (iter < max_iter) {
 			if(alpha[i] > 0)
 				++nSV;
 		}
-
+		
 		printf("iter %d time %.5lf runtime %.5lf loadtime %.5lf cputime %.5lf obj %lf  PGmax %.5lf PGmin %.5lf gap %.5lf ", 
 				iter, total_time, total_time-total_load, total_load, total_cpu,  v/2,  PGmax, PGmin, PGmax - PGmin);
+		
 		if(param->showprimal) {
 			double primal = primal_value(bprob, solver_type, y, Cp, w);
 			printf("primal %.5lf ", primal);
 		}
-		if(param->prob_t != NULL) 
+		if(param->prob_t != NULL)
+		{
 			printf("aoc %lf ", 100*evaluate_testing(w, n, param->prob_t, bprob->label[0]));
+		}
+			
 		printf("\n");
 		fflush(stdout);
-		//if(solved && PGmax - PGmin < eps)
-			//break;
+		if(solved && PGmax - PGmin < eps)
+			break;
 
 	}
 

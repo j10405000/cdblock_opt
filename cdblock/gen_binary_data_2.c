@@ -10,16 +10,14 @@
 
 int main( int argc, char *argv[] )
 {
-	
 	time_t startload_t;
 	double init_load_t=0;
 	
 	startload_t = time(NULL);
-	//sleep(3);
+	
+	//Open the raw training data
 	FILE *fp;
-	fp = fopen(argv[1], "r");	
-	//fp = fopen("../data/webspam.train", "r");
-	//fp = fopen("123", "r");
+	fp = fopen(argv[1], "r");
 	
     struct problem total_prob;
 	
@@ -55,7 +53,7 @@ int main( int argc, char *argv[] )
 	/*debug
 	printf("test: %d %d\n", total_prob.l, total_prob.n);
 	*/
-
+	
 	unsigned long long *offset = Malloc(unsigned long long,total_prob.l+1);
 
 	char *buf = Malloc(char,1000000);
@@ -75,10 +73,8 @@ int main( int argc, char *argv[] )
 		i++;
 	}
 	
-	//int num_feature[total_prob.l];
 	int *num_feature = Malloc(int,total_prob.l);
 
-	
 	feature_node **node = Malloc(feature_node*,total_prob.l);
 	int *y = Malloc(int,total_prob.l);
 	
@@ -87,11 +83,9 @@ int main( int argc, char *argv[] )
 	feature_node *node_buffer = Malloc(feature_node,total_prob.n);
 	
 	char  label_buf[2];
-	int max_feature = 0;
 	
 	for(int i=0; i<total_prob.l; i++)
 	{
-		//printf("i=%d\n", i);
 		fseek(fp, offset[i], SEEK_SET);
 		
 		fgets(buf,1000000,fp);
@@ -162,16 +156,8 @@ int main( int argc, char *argv[] )
 			//xi++;
 		}
 		
-		//if(i%10000==0)
-			//printf("num_feature[%d]: %d\n", i, num_feature[i]);
-		
-		//Find the max feature number
-		if(num_feature[i] > max_feature)
-		{
-			max_feature = num_feature[i];
-			printf("num_feature[%d]: %d, max_feature: %d\n", i, num_feature[i], max_feature);
-		}
-			
+		//if(i%10000==0 && num_feature[i]>50)
+		//printf("num_feature[%d]: %d\n", i, num_feature[i]);
 
 		node[i] = Malloc(feature_node,num_feature[i]+1);
 
